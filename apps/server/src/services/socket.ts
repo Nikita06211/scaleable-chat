@@ -1,6 +1,21 @@
 import { Server } from "socket.io";
-import { Server as HTTPServer } from "http";
+import Valkey from 'iovalkey';
+import 'dotenv/config';
 
+
+const pub = new Valkey({
+  host: 'valkey-32e36cc0-bansalnikita06-8f8b.b.aivencloud.com',
+  port: 13937,
+  username: 'default',
+  password: process.env.VALKEY_PASSWORD
+});
+
+const sub = new Valkey({
+  host: 'valkey-32e36cc0-bansalnikita06-8f8b.b.aivencloud.com',
+  port: 13937,
+  username: 'default',
+  password: process.env.VALKEY_PASSWORD
+});
 class SocketService {
   private _io: Server;
 
@@ -13,6 +28,7 @@ class SocketService {
         origin: "*",
       },
     });
+    sub.subscribe('MESSAGES');
   }
 
   public initListeners() {
@@ -24,7 +40,14 @@ class SocketService {
 
       socket.on("event:message", async ({ message }: { message: string }) => {
         console.log("new message received", message);
+        await pub.publish('MESSAGES', JSON.stringify({message}));
       });
+    });
+    sub.on('message', (channel,message)=>{
+      if(channel === 'MESSAGES'){
+        console.log("new message from redis", message);
+        io.emit('message', message);
+      }
     });
   }
 

@@ -12,6 +12,7 @@
         "typescript": "^5.8.3"
     },
     "dependencies": {
+        "iovalkey": "^0.3.3",
         "socket.io": "^4.8.1"
     }
 }
