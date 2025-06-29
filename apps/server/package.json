@@ -4,15 +4,22 @@
     "private": true,
     "scripts": {
         "start": "node dist/index",
-        "build": "tsc -p .",
-        "dev": "tsc-watch --onSuccess \"node dist/index.js\""
+        "build": "prisma generate && tsc -p .",
+        "dev": "prisma generate && tsc-watch --onSuccess \"node dist/index.js\"",
+        "prisma:generate": "prisma generate",
+        "prisma:push": "prisma db push"
     },
     "devDependencies": {
+        "@types/node": "^24.0.4",
+        "prisma": "^6.10.1",
+        "ts-node": "^10.9.2",
         "tsc-watch": "^7.1.1",
         "typescript": "^5.8.3"
     },
     "dependencies": {
+        "@prisma/client": "^6.10.1",
         "iovalkey": "^0.3.3",
+        "kafkajs": "^2.2.4",
         "socket.io": "^4.8.1"
     }
 }

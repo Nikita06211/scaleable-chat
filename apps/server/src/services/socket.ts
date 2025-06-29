@@ -1,7 +1,8 @@
 import { Server } from "socket.io";
 import Valkey from 'iovalkey';
 import 'dotenv/config';
-
+import prisma from "../prisma";
+import { produceMessage } from "./kafka";
 
 const pub = new Valkey({
   host: 'valkey-32e36cc0-bansalnikita06-8f8b.b.aivencloud.com',
@@ -43,10 +44,12 @@ class SocketService {
         await pub.publish('MESSAGES', JSON.stringify({message}));
       });
     });
-    sub.on('message', (channel,message)=>{
+    sub.on('message', async(channel,message)=>{
       if(channel === 'MESSAGES'){
         console.log("new message from redis", message);
         io.emit('message', message);
+        await produceMessage(message);
+        console.log("Message produced to kafka");
       }
     });
   }
