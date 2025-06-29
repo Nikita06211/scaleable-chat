@@ -1,7 +1,6 @@
 import { Server } from "socket.io";
 import Valkey from 'iovalkey';
 import 'dotenv/config';
-import prisma from "../prisma";
 import { produceMessage } from "./kafka";
 
 const pub = new Valkey({
