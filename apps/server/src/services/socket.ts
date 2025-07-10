@@ -3,6 +3,8 @@ import Valkey from 'iovalkey';
 import 'dotenv/config';
 import { produceMessage } from "./kafka";
 
+const userSocketMap = new Map<string, string>();
+
 const pub = new Valkey({
   host: 'valkey-32e36cc0-bansalnikita06-8f8b.b.aivencloud.com',
   port: 13937,
@@ -38,17 +40,40 @@ class SocketService {
     io.on("connect", (socket) => {
       console.log("new socket connected", socket.id);
 
-      socket.on("event:message", async ({ message }: { message: string }) => {
-        console.log("new message received", message);
-        await pub.publish('MESSAGES', JSON.stringify({message}));
-      });
+      socket.on("event:register", ({ userId }) => {
+      userSocketMap.set(userId, socket.id);
     });
-    sub.on('message', async(channel,message)=>{
-      if(channel === 'MESSAGES'){
-        console.log("new message from redis", message);
-        io.emit('message', message);
-        await produceMessage(message);
-        console.log("Message produced to kafka");
+
+    socket.on("disconnect", () => {
+    for (const [userId, sId] of userSocketMap.entries()) {
+      if (sId === socket.id) {
+        userSocketMap.delete(userId);
+        break;
+      }
+    }
+  });
+
+    socket.on("event:message", async ({ senderId, receiverId, message }) => {
+      const payload = { senderId, receiverId, message };
+      await pub.publish('MESSAGES', JSON.stringify(payload));
+    });
+  });
+    sub.on("message", async (channel, rawMessage) => {
+       try {
+        const { senderId, receiverId, message } = JSON.parse(rawMessage);
+
+        const receiverSocketId = userSocketMap.get(receiverId);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("message", { senderId, message });
+        }
+        const senderSocketId = userSocketMap.get(senderId);
+        if (senderSocketId) {
+          io.to(senderSocketId).emit("message", { receiverId, message });
+        }
+
+        await produceMessage(rawMessage);
+      } catch (err) {
+        console.error("Failed to process Redis message:", err);
       }
     });
   }

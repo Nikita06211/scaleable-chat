@@ -27,40 +27,67 @@ export async function createProducer(){
     return producer;
 }
 
-export async function produceMessage(message: string) {
-    const producer = await createProducer();
-    await producer.send({
-        messages: [{key: `message-${Date.now()}`, value: message}],
-        topic: 'MESSAGES'
-    })
-    return true;
+export async function produceMessage(raw: string) {
+  const producer = await createProducer();
+  const parsed = JSON.parse(raw);
+
+  await producer.send({
+    topic: 'MESSAGES',
+    messages: [
+      {
+        key: `message-${Date.now()}`,
+        value: JSON.stringify({
+          text: parsed.message,
+          senderId: parsed.senderId,
+          receiverId: parsed.receiverId,
+        }),
+      },
+    ],
+  });
+
+  return true;
 }
 
-export async function startMessageConsumer(){
-    const cosumer = kafka.consumer({groupId: 'default'});
-    await cosumer.connect();
-    await cosumer.subscribe({topic: 'MESSAGES', fromBeginning: true});
 
-    await cosumer.run({
+export async function startMessageConsumer(){
+    const consumer = kafka.consumer({groupId: 'default'});
+    await consumer.connect();
+    await consumer.subscribe({topic: 'MESSAGES', fromBeginning: true});
+
+    await consumer.run({
         autoCommit: true,
-        eachMessage : async({message, pause})=>{
-            console.log("New message received");
-            if(message.value === null) return;
+        eachMessage: async ({ message, pause }) => {
+            console.log("New message received from Kafka");
+
+            if (!message.value) return;
+
             try {
-                await prisma.message.create({
-                    data:{
-                        text: message.value?.toString(),
-                    },
-                });
+            const msg = JSON.parse(message.value.toString());
+
+            const { text, senderId, receiverId } = msg;
+
+            if (!text || !senderId || !receiverId) {
+                console.warn("Invalid message structure", msg);
+                return;
+            }
+
+            await prisma.message.create({
+                data: {
+                text,
+                senderId,
+                receiverId,
+                },
+            });
             } catch (error) {
-                console.log("something is wrong");
-                pause();
-                setTimeout(()=>{
-                    cosumer.resume([{topic: 'MESSAGES'}]);
-                }, 60*1000)
+            console.error("Error storing message in DB:", error);
+            pause();
+            setTimeout(() => {
+                consumer.resume([{ topic: 'MESSAGES' }]);
+            }, 60 * 1000);
             }
         },
     });
+
 }
 
 export default kafka;
