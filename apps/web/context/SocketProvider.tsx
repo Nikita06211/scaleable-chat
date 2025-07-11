@@ -1,35 +1,36 @@
-"use client"
+"use client";
 import React, { useCallback, useContext, useEffect, useState } from "react";
-import {io, Socket} from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 
-interface SocketProviderProps{
-    userId: string,
-    children?: React.ReactNode;
+interface SocketProviderProps {
+  userId: string;
+  children?: React.ReactNode;
 }
 
 interface Message {
-    senderId: string;
-    message: string;
+  senderId: string;
+  receiverId: string;
+  message: string;
 }
 
-interface ISocketContext{
-    sendMessage: (msg:string, receiverId :string)=>void; 
-    messages: Message[];
+interface ISocketContext {
+  sendMessage: (msg: string, receiverId: string) => void;
+  messages: Message[];
 }
 
 const SocketContext = React.createContext<ISocketContext | null>(null);
 
-export const useSocket = ()=>{
-    const state = useContext(SocketContext);
-    if(!state) throw new Error(`state is undefined`);
+export const useSocket = () => {
+  const state = useContext(SocketContext);
+  if (!state) throw new Error(`Socket context is undefined`);
+  return state;
+};
 
-    return state;
-}
+export const SocketProvider: React.FC<SocketProviderProps> = ({ userId, children }) => {
+  const [socket, setSocket] = useState<Socket>();
+  const [messages, setMessages] = useState<Message[]>([]);
 
-export const SocketProvider:React.FC<SocketProviderProps> = ({userId, children})=>{
-    const [socket, setSocket] = useState<Socket>()
-    const [messages, setMessages] = useState<Message[]>([]);
-    const sendMessage = useCallback(
+  const sendMessage = useCallback(
     (msg: string, receiverId: string) => {
       if (socket) {
         socket.emit("event:message", {
@@ -42,27 +43,31 @@ export const SocketProvider:React.FC<SocketProviderProps> = ({userId, children})
     [socket, userId]
   );
 
-    const onMessageRec = useCallback((payload: { senderId: string; message: string }) => {
+  const onMessageRec = useCallback((payload: Message) => {
     console.log("From Server Msg Rec", payload);
     setMessages((prev) => [...prev, payload]);
   }, []);
 
+  useEffect(() => {
+    const _socket = io("http://localhost:8000");
 
-    useEffect(() => {
-        const _socket = io("http://localhost:8000");
+    _socket.emit("event:register", { userId });
 
-        // 🔐 Register this user
-        _socket.emit("event:register", { userId });
+    // Important: Match this event name with your backend emit
+    _socket.on("event:message", onMessageRec);
 
-        _socket.on("message", onMessageRec);
-        setSocket(_socket);
+    setSocket(_socket);
 
-        return () => {
-        _socket.disconnect();
-        _socket.off("message", onMessageRec);
-        setSocket(undefined);
-        };
-    }, [userId, onMessageRec]);
+    return () => {
+      _socket.disconnect();
+      _socket.off("event:message", onMessageRec);
+      setSocket(undefined);
+    };
+  }, [userId, onMessageRec]);
 
-    return <SocketContext.Provider value={{ sendMessage, messages }}>{children}</SocketContext.Provider>;
+  return (
+    <SocketContext.Provider value={{ sendMessage, messages }}>
+      {children}
+    </SocketContext.Provider>
+  );
 };

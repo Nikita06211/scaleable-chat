@@ -3,7 +3,9 @@ import http from "http";
 import cors from "cors";
 import SocketService from "./services/socket";
 import { startMessageConsumer } from "./services/kafka";
-import authRoutes from "./routes/auth"; // make sure this file exists
+import authRoutes from "./routes/auth"; 
+import userRoutes from "./routes/users";
+import chatHistoryRoutes from "./routes/messages";
 
 async function init() {
   await startMessageConsumer();
@@ -17,6 +19,8 @@ async function init() {
 
   // Routes
   app.use("/api", authRoutes);
+  app.use("/api", userRoutes);
+  app.use("/api/messages", chatHistoryRoutes);
 
   // Create HTTP server and attach socket
   const httpServer = http.createServer(app);

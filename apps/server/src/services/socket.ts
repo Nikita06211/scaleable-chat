@@ -18,6 +18,7 @@ const sub = new Valkey({
   username: 'default',
   password: process.env.VALKEY_PASSWORD
 });
+
 class SocketService {
   private _io: Server;
 
@@ -30,6 +31,8 @@ class SocketService {
         origin: "*",
       },
     });
+
+    // Subscribe to Valkey PubSub channel
     sub.subscribe('MESSAGES');
   }
 
@@ -40,35 +43,43 @@ class SocketService {
     io.on("connect", (socket) => {
       console.log("new socket connected", socket.id);
 
+      // Register user
       socket.on("event:register", ({ userId }) => {
-      userSocketMap.set(userId, socket.id);
+        userSocketMap.set(userId, socket.id);
+      });
+
+      // Cleanup on disconnect
+      socket.on("disconnect", () => {
+        for (const [userId, sId] of userSocketMap.entries()) {
+          if (sId === socket.id) {
+            userSocketMap.delete(userId);
+            break;
+          }
+        }
+      });
+
+      // Message sent from client
+      socket.on("event:message", async ({ senderId, receiverId, message }) => {
+        const payload = { senderId, receiverId, message };
+        await pub.publish('MESSAGES', JSON.stringify(payload));
+      });
     });
 
-    socket.on("disconnect", () => {
-    for (const [userId, sId] of userSocketMap.entries()) {
-      if (sId === socket.id) {
-        userSocketMap.delete(userId);
-        break;
-      }
-    }
-  });
-
-    socket.on("event:message", async ({ senderId, receiverId, message }) => {
-      const payload = { senderId, receiverId, message };
-      await pub.publish('MESSAGES', JSON.stringify(payload));
-    });
-  });
+    // Message received from Redis and sent to both users
     sub.on("message", async (channel, rawMessage) => {
-       try {
+      try {
         const { senderId, receiverId, message } = JSON.parse(rawMessage);
+        const payload = { senderId, receiverId, message };
 
         const receiverSocketId = userSocketMap.get(receiverId);
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit("message", { senderId, message });
-        }
         const senderSocketId = userSocketMap.get(senderId);
+
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("event:message", payload);
+        }
+
         if (senderSocketId) {
-          io.to(senderSocketId).emit("message", { receiverId, message });
+          io.to(senderSocketId).emit("event:message", payload);
         }
 
         await produceMessage(rawMessage);
